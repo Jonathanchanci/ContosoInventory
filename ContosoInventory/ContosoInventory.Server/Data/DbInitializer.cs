@@ -116,6 +116,58 @@ public static class DbInitializer
             await context.SaveChangesAsync();
             logger.LogInformation("Categories seeded: {Count} categories.", categories.Count);
         }
+
+        if (!await context.Products.AnyAsync())
+        {
+            var categories = await context.Categories
+                .OrderBy(c => c.DisplayOrder)
+                .Take(3)
+                .ToListAsync();
+
+            if (categories.Count >= 3)
+            {
+                var products = new List<Product>
+                {
+                    new Product
+                    {
+                        Name = "Surface Laptop 6",
+                        Sku = "LAP-1001",
+                        Description = "High-performance business laptop for office productivity.",
+                        Price = 1299.99m,
+                        StockQuantity = 12,
+                        CategoryId = categories[0].Id,
+                        CreatedDate = new DateTime(2025, 2, 10, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedDate = new DateTime(2025, 2, 10, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    new Product
+                    {
+                        Name = "4K Ultrawide Monitor",
+                        Sku = "MON-2005",
+                        Description = "Large-format productivity monitor with HDR support.",
+                        Price = 699.00m,
+                        StockQuantity = 18,
+                        CategoryId = categories[1].Id,
+                        CreatedDate = new DateTime(2025, 2, 12, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedDate = new DateTime(2025, 2, 12, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    new Product
+                    {
+                        Name = "Business Wi-Fi Router",
+                        Sku = "NET-3007",
+                        Description = "Secure router for branch office connectivity.",
+                        Price = 299.50m,
+                        StockQuantity = 24,
+                        CategoryId = categories[2].Id,
+                        CreatedDate = new DateTime(2025, 2, 14, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedDate = new DateTime(2025, 2, 14, 0, 0, 0, DateTimeKind.Utc)
+                    }
+                };
+
+                context.Products.AddRange(products);
+                await context.SaveChangesAsync();
+                logger.LogInformation("Products seeded: {Count} products.", products.Count);
+            }
+        }
     }
 
     private static async Task SeedUserAsync(
