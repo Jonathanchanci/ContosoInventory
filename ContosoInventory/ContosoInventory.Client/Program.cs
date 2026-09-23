@@ -18,5 +18,6 @@ builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
     provider.GetRequiredService<CookieAuthStateProvider>());
 
 builder.Services.AddScoped<CategoryApiService>();
+builder.Services.AddScoped<ProductApiService>();
 
 await builder.Build().RunAsync();

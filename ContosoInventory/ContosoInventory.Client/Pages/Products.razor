@@ -1,0 +1,463 @@
+@page "/products"
+@attribute [Authorize]
+@inject ProductApiService ProductService
+@inject CategoryApiService CategoryService
+
+<PageTitle>Products - ContosoInventory</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Products</h1>
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <button class="btn btn-primary" @onclick="ShowAddModal" disabled="@(!categories.Any())">
+                Add Product
+            </button>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@if (!categories.Any() && !isLoading)
+{
+    <div class="alert alert-warning" role="alert">
+        Create at least one category before adding products.
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (products == null || !products.Any())
+{
+    <div class="alert alert-info">No products found.</div>
+}
+else
+{
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+            @statusMessage
+            <button type="button" class="btn-close" @onclick="() => statusMessage = null"></button>
+        </div>
+    }
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>SKU</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Last Updated</th>
+                    <AuthorizeView Roles="Admin">
+                        <Authorized>
+                            <th>Actions</th>
+                        </Authorized>
+                    </AuthorizeView>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var product in products)
+                {
+                    <tr>
+                        <td class="fw-semibold">@product.Name</td>
+                        <td>@product.Sku</td>
+                        <td>@GetCategoryName(product.CategoryId)</td>
+                        <td>@product.Price.ToString("C")</td>
+                        <td>
+                            @if (product.StockQuantity <= 5)
+                            {
+                                <span class="badge bg-warning text-dark">@product.StockQuantity</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">@product.StockQuantity</span>
+                            }
+                        </td>
+                        <td>@product.LastUpdatedDate.ToLocalTime().ToString("MMM dd, yyyy")</td>
+                        <AuthorizeView Roles="Admin">
+                            <Authorized>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowEditModal(product)">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success me-1" @onclick="() => ShowRestockModal(product)">
+                                        Restock
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => ShowDeleteConfirm(product)">
+                                        Delete
+                                    </button>
+                                </td>
+                            </Authorized>
+                        </AuthorizeView>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(isEditing ? "Edit Product" : "Add Product")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+
+                <EditForm Model="formModel" OnValidSubmit="SaveProduct" FormName="productForm">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(modalError))
+                        {
+                            <div class="alert alert-danger">@modalError</div>
+                        }
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="name" class="form-label">Name</label>
+                                <InputText id="name" class="form-control" @bind-Value="formModel.Name" />
+                                <ValidationMessage For="@(() => formModel.Name)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label for="sku" class="form-label">SKU</label>
+                                <InputText id="sku" class="form-control" @bind-Value="formModel.Sku" />
+                                <ValidationMessage For="@(() => formModel.Sku)" />
+                            </div>
+                            <div class="col-12">
+                                <label for="description" class="form-label">Description</label>
+                                <InputTextArea id="description" class="form-control" rows="3" @bind-Value="formModel.Description" />
+                                <ValidationMessage For="@(() => formModel.Description)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label for="price" class="form-label">Price</label>
+                                <InputNumber id="price" class="form-control" @bind-Value="formModel.Price" step="0.01" />
+                                <ValidationMessage For="@(() => formModel.Price)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label for="stockQuantity" class="form-label">Stock Quantity</label>
+                                <InputNumber id="stockQuantity" class="form-control" @bind-Value="formModel.StockQuantity" />
+                                <ValidationMessage For="@(() => formModel.StockQuantity)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label for="categoryId" class="form-label">Category</label>
+                                <InputSelect id="categoryId" class="form-select" @bind-Value="formModel.CategoryId">
+                                    @if (categories.Any())
+                                    {
+                                        <option value="0">Select a category</option>
+                                        @foreach (var category in categories)
+                                        {
+                                            <option value="@category.Id">@category.Name</option>
+                                        }
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => formModel.CategoryId)" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Save
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showDeleteModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="() => showDeleteModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the product "<strong>@productToDelete?.Name</strong>"?</p>
+                    <p class="text-danger">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showDeleteModal = false">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteProduct" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showRestockModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Restock Product</h5>
+                    <button type="button" class="btn-close" @onclick="() => showRestockModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Current stock for <strong>@productToRestock?.Name</strong>: <span class="badge bg-secondary">@productToRestock?.StockQuantity</span></p>
+                    <label for="restockQuantity" class="form-label">Quantity to add</label>
+                    <InputNumber id="restockQuantity" class="form-control" @bind-Value="restockQuantity" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showRestockModal = false">Cancel</button>
+                    <button type="button" class="btn btn-success" @onclick="RestockProduct" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Restock
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProductResponseDto>? products;
+    private List<CategoryResponseDto> categories = new();
+    private bool isLoading = true;
+    private string? statusMessage;
+    private bool isError;
+
+    private bool showModal;
+    private bool isEditing;
+    private int editingId;
+    private UpdateProductDto formModel = new();
+    private string? modalError;
+    private bool isSaving;
+
+    private bool showDeleteModal;
+    private ProductResponseDto? productToDelete;
+
+    private bool showRestockModal;
+    private ProductResponseDto? productToRestock;
+    private int restockQuantity = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            categories = await CategoryService.GetAllCategoriesAsync();
+            products = await ProductService.GetAllProductsAsync();
+        }
+        catch
+        {
+            statusMessage = "Failed to load products.";
+            isError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetCategoryName(int categoryId)
+    {
+        var category = categories.FirstOrDefault(c => c.Id == categoryId);
+        return category?.Name ?? "Unknown";
+    }
+
+    private void ShowAddModal()
+    {
+        if (!categories.Any())
+        {
+            statusMessage = "Create at least one category before adding a product.";
+            isError = true;
+            return;
+        }
+
+        isEditing = false;
+        editingId = 0;
+        formModel = new UpdateProductDto
+        {
+            Name = string.Empty,
+            Sku = string.Empty,
+            Description = string.Empty,
+            Price = 0m,
+            StockQuantity = 0,
+            CategoryId = categories.FirstOrDefault()?.Id ?? 0
+        };
+        modalError = null;
+        showModal = true;
+    }
+
+    private void ShowEditModal(ProductResponseDto product)
+    {
+        isEditing = true;
+        editingId = product.Id;
+        formModel = new UpdateProductDto
+        {
+            Name = product.Name,
+            Sku = product.Sku,
+            Description = product.Description,
+            Price = product.Price,
+            StockQuantity = product.StockQuantity,
+            CategoryId = product.CategoryId
+        };
+        modalError = null;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        modalError = null;
+    }
+
+    private async Task SaveProduct()
+    {
+        isSaving = true;
+        modalError = null;
+
+        try
+        {
+            if (isEditing)
+            {
+                await ProductService.UpdateProductAsync(editingId, formModel);
+                statusMessage = $"Product '{formModel.Name}' updated successfully.";
+            }
+            else
+            {
+                var createDto = new CreateProductDto
+                {
+                    Name = formModel.Name,
+                    Sku = formModel.Sku,
+                    Description = formModel.Description,
+                    Price = formModel.Price,
+                    StockQuantity = formModel.StockQuantity,
+                    CategoryId = formModel.CategoryId
+                };
+
+                await ProductService.CreateProductAsync(createDto);
+                statusMessage = $"Product '{formModel.Name}' created successfully.";
+            }
+
+            isError = false;
+            showModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            modalError = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Failed to save product."
+                : ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowDeleteConfirm(ProductResponseDto product)
+    {
+        productToDelete = product;
+        showDeleteModal = true;
+    }
+
+    private async Task DeleteProduct()
+    {
+        if (productToDelete == null) return;
+
+        isSaving = true;
+        try
+        {
+            var deleted = await ProductService.DeleteProductAsync(productToDelete.Id);
+            if (deleted)
+            {
+                statusMessage = $"Product '{productToDelete.Name}' deleted successfully.";
+                isError = false;
+            }
+            else
+            {
+                statusMessage = "Failed to delete product.";
+                isError = true;
+            }
+
+            showDeleteModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = string.IsNullOrWhiteSpace(ex.Message)
+                ? "An error occurred while deleting the product."
+                : $"An error occurred while deleting the product: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowRestockModal(ProductResponseDto product)
+    {
+        productToRestock = product;
+        restockQuantity = 1;
+        showRestockModal = true;
+    }
+
+    private async Task RestockProduct()
+    {
+        if (productToRestock == null) return;
+
+        isSaving = true;
+        try
+        {
+            var updated = await ProductService.RestockProductAsync(productToRestock.Id, restockQuantity);
+            if (updated != null)
+            {
+                statusMessage = $"Product '{productToRestock.Name}' restocked by {restockQuantity} units.";
+                isError = false;
+            }
+            else
+            {
+                statusMessage = "Failed to restock product.";
+                isError = true;
+            }
+
+            showRestockModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            statusMessage = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Failed to restock product."
+                : $"Failed to restock product: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
